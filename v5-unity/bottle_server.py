@@ -11,14 +11,13 @@
 # easy_install pip
 # pip install bottle
 
-from bottle import route, get, request, run, template, static_file
+from bottle import route, get, request, run, template, static_file, hook, response
 try:
     import StringIO # NB: don't use cStringIO since it doesn't support unicode!!!
 except:
     import io as StringIO # py3
 import json
 import pg_logger
-
 
 @route('/web_exec_<name:re:.+>.py')
 @route('/LIVE_exec_<name:re:.+>.py')
@@ -61,5 +60,18 @@ def get_py_exec():
   return out_s.getvalue()
 
 
+_allow_origin = '*'
+_allow_methods = 'GET'
+_allow_headers = 'Origin, Accept, Content-Type, X-Requested-With'
+
+@hook('after_request')
+def enable_cors():
+    '''Add headers to enable CORS'''
+
+    response.headers['Access-Control-Allow-Origin'] = _allow_origin
+    response.headers['Access-Control-Allow-Methods'] = _allow_methods
+    response.headers['Access-Control-Allow-Headers'] = _allow_headers
+
+
 if __name__ == "__main__":
-    run(host='localhost', port=8003, reloader=True)
+    run(host='localhost', port=8003, debug=True, reloader=True)
