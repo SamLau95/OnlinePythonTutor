@@ -2,11 +2,23 @@
 
 JS logger backend for Online Python Tutor runtime visualizer
 
+Dev tips:
+- use log() to print debugging output to terminal. do NOT use console.log()
+  since that won't work ... it will go to the stdout of the trace itself!
+- [this one is a bit hard to articulate] do NOT call methods on objects that
+  you're trying to encode in encodeObject and related functions, since if
+  those methods are defined in the object, the logger will try to call
+  them and then encode their contents, which sometimes leads to CRASHES
+- debugging is a PAIN since the logger often crashes without an exception
+  because (maybe, i think?) exceptions are themselves logged to trace?!?
+
+
 First version created on: 2015-01-02 by Philip Guo
 - originally made for Node v0.10.25, which supports ES5 (Jan 2015)
 - on 2016-05-01, ported over to also work on Node v6.0.0, which supports ES6
 - NB on 2018-04-05: this script seems *very* sensitive to Node version,
   so even a slightly newer version of Node v6 won't work; it seems very brittle
+  - DON'T UPGRADE UNLESS YOU'RE PREPARED TO HUNT DOWN SUBTLE BUGS
 
 Run as:
 node --expose-debug-as=Debug jslogger.js
@@ -57,6 +69,8 @@ regarding the 'handle_' field of serialized objects ...
 
 
 TODOs:
+- eliminate 'var' declarations and use 'let' instead! 'var' leads to
+  subtle subtle bugs, ergh!!!
 
 
 Low-priority TODOs:
@@ -88,7 +102,7 @@ TypeScript TODOs:
 */
 
 
-/*jshint node: true */
+/* jshint esversion: 6, unused: false, node: true */
 /* global Debug */
 "use strict";
 
@@ -109,6 +123,8 @@ var log = console.warn; // use stderr because stdout is being captured in the tr
 
 
 var argv = require('minimist')(process.argv.slice(2));
+
+let DEBUG_LOG = false;
 
 
 var IGNORE_GLOBAL_VARS = {'ArrayBuffer': true,
@@ -293,15 +309,21 @@ function resetHeap() {
   encodedHeapObjects = {};
 }
 
-// for some weird reason, doing an 'instanceof' test doesn't work :/
-var canonicalSet = new Set();
-var canonicalMap = new Map();
-
 // modeled after:
 // https://github.com/pgbovine/OnlinePythonTutor/blob/master/v3/pg_encoder.py
 //
 // modifies global encodedHeapObjects
+//
+// WARNING: do NOT call methods on objects that you're trying to encode in
+// encodeObject and related functions, since if those methods are defined
+// in the object, the logger will try to call them and then encode their
+// contents, which sometimes leads to CRASHES. for instance, if you call
+// o.toString() or o.__proto__.toString() expecting Object's toString
+// but o actually defines a custom toString(), then that will be called
+// and weird crashes will happen. [ugh i'm not explaining this super-well]
 function encodeObject(o) {
+  if (DEBUG_LOG) {log('encodeObject', o);}
+
   if (_.isNumber(o)) {
     if (_.isNaN(o)) {
       return ['SPECIAL_FLOAT', 'NaN'];
@@ -411,13 +433,13 @@ function bar(x) {
         for (i = 0; i < o.length; i++) {
           newEncodedObj.push(encodeObject(o[i]));
         }
-      } else if (o.__proto__.toString() === canonicalSet.__proto__.toString()) { // dunno why 'instanceof' doesn't work :(
+      } else if (_.isSet(o)) { // instanceof doesn't work, but _.isSet seems to!
         newEncodedObj.push('SET');
         // ES6 Set (TODO: add WeakSet)
         for (let item of o) {
           newEncodedObj.push(encodeObject(item));
         }
-      } else if (o.__proto__.toString() === canonicalMap.__proto__.toString()) { // dunno why 'instanceof' doesn't work :(
+      } else if (_.isMap(o)) { // instanceof doesn't work, but _.isMap seems to!
         // ES6 Map (TODO: add WeakMap)
         newEncodedObj.push('DICT'); // use the Python 'DICT' type since it's close enough; adjust display in frontend
         for (let [key, value] of o) {
@@ -426,27 +448,29 @@ function bar(x) {
       } else {
         // a true object
 
-        // if there's a custom toString() function (note that a truly
-        // prototypeless object won't have toString method, so check first to
-        // see if toString is *anywhere* up the prototype chain)
-        var s = (o.toString !== undefined) ? o.toString() : '';
-        if (s !== '' && s !== '[object Object]') {
-          newEncodedObj.push('INSTANCE_PPRINT', 'object', s);
-        } else {
-          newEncodedObj.push('INSTANCE', '');
-          var pairs = _.pairs(o);
-          for (i = 0; i < pairs.length; i++) {
-            var e = pairs[i];
-            newEncodedObj.push([encodeObject(e[0]), encodeObject(e[1])]);
-          }
+        // a prior bug here is that if o defines its own toString(),
+        // then the logger might crash when trying to call it. thus, do
+        // NOT call toString() in here to try to emit a INSTANCE_PPRINT.
+        //
+        // note that this means we won't ever emit INSTANCE_PPRINT
+        // entries to pretty-print objects using their toString()
+        // representations, which might make some objects print out
+        // messier; oh wells!
+        newEncodedObj.push('INSTANCE', '');
+        var pairs = _.pairs(o);
+        for (i = 0; i < pairs.length; i++) {
+          var e = pairs[i];
+          newEncodedObj.push([encodeObject(e[0]), encodeObject(e[1])]);
+        }
 
-          var proto = Object.getPrototypeOf(o);
-          if (_.isObject(proto) && !_.isEmpty(proto)) {
-            //log('obj.prototype', proto, proto.smallObjId_hidden_);
-            // I think __proto__ is the official term for this field,
-            // *not* 'prototype'
-            newEncodedObj.push(['__proto__', encodeObject(proto)]);
-          }
+        var proto = Object.getPrototypeOf(o);
+        if (_.isObject(proto) && !_.isEmpty(proto)) {
+          //log('obj.prototype', proto, proto.smallObjId_hidden_);
+          // I think __proto__ is the official term for this field,
+          // *not* 'prototype'
+          // 2020-02-10: note that __proto__ is actually deprecated:
+          // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/proto
+          newEncodedObj.push(['__proto__', encodeObject(proto)]);
         }
       }
 
@@ -525,8 +549,6 @@ function listener(event, execState, eventData, data) {
   var all_userscript_frames = [];
 
 
-  //log('execState.frameCount', execState.frameCount());
-
   // only dig up frames in userscript.js
   for (i = 0, n = execState.frameCount(); i < n; i++) {
     f = execState.frame(i);
@@ -556,8 +578,10 @@ function listener(event, execState, eventData, data) {
     }
     prevStack = curStack;
 
-    //log('======');
-    //log('all_userscript_frames.length:', all_userscript_frames.length);
+    if (DEBUG_LOG) {
+      log('======');
+      log('all_userscript_frames.length:', all_userscript_frames.length);
+    }
     var topFrame = all_userscript_frames[0];
     var topIsReturn = topFrame.isAtReturn();
     if (topIsReturn) {
@@ -635,12 +659,14 @@ function listener(event, execState, eventData, data) {
     curTraceEntry.event = logEventType;
     curTraceEntry.heap = getHeap();
 
+    if (DEBUG_LOG) {log('Line', curTraceEntry.line);}
+
     var hasLocalBlock = false;
 
     for (i = 0;
          i < all_userscript_frames.length - 1; /* last frame is fake 'top-level' global frame */
          i++) {
-      //log('all_userscript_frames[' + i + ']');
+      if (DEBUG_LOG) {log('all_userscript_frames[' + i + ']');}
       var traceStackEntry = {};
 
       f = all_userscript_frames[i];
@@ -649,7 +675,7 @@ function listener(event, execState, eventData, data) {
       var isConstructorCall = f.isConstructCall();
 
       var fid = getCanonicalFrameId(f);
-      //log(i, 'funcname:', f.func().name(), fid);
+      if (DEBUG_LOG) {log(i, 'funcname:', f.func().name(), fid);}
 
       traceStackEntry.func_name = f.func().name();
       traceStackEntry.frame_id = fid;
@@ -680,7 +706,6 @@ function listener(event, execState, eventData, data) {
       var receiver = f.receiver();
       if (receiver.type_ === 'object') {
         var realThis = receiver.value_;
-
         // sometimes you'll get a weirdo receiver that's an empty object
         // with NO PROTOTYPE ... wtf?!? WTF?!? that's real bad news, so
         // we don't want to try to run encodeObject on it, since it
@@ -747,7 +772,7 @@ function listener(event, execState, eventData, data) {
         }
       }
 
-      //log('  f.scopeCount()', f.scopeCount(), ', nBlockScopes:', nBlockScopes);
+      if (DEBUG_LOG) {log('  f.scopeCount()', f.scopeCount(), ', nBlockScopes:', nBlockScopes);}
 
       var nParentScopes = 1;
       // TODO: for some weird reason, it doesn't work when I iterate
@@ -789,10 +814,17 @@ function listener(event, execState, eventData, data) {
 
           scopeObj = sc.details_.details_[1];
           assert(_.isObject(scopeObj));
-          var localScopePairs = _.pairs(scopeObj);
-          //log('Local vars:', util.inspect(scopeObj));
+          let localScopePairs = _.pairs(scopeObj);
+          if (DEBUG_LOG) {log('Local vars:', util.inspect(scopeObj));}
           for (jj = 0; jj < localScopePairs.length; jj++) {
             e = localScopePairs[jj];
+            // when you use '..args' for rest parameters, it bizzarely
+            // creates an extra '' unnamed variable above args, so just
+            // ignore that since it seems super confusing ...
+            // see tests/let-bugreport-3*.js
+            if (e[0] === '') {
+              continue;
+            }
             traceStackEntry.ordered_varnames.push(e[0]);
             assert(!_.has(traceStackEntry.encoded_locals, e[0]));
             traceStackEntry.encoded_locals[e[0]] = encodeObject(e[1]);
@@ -832,13 +864,13 @@ function listener(event, execState, eventData, data) {
           scopeIdx = nBlockScopes - sc.scope_index_;
           scopeObj = sc.details_.details_[1];
           assert(_.isObject(scopeObj));
-          //log('Local block:', scopeIdx, util.inspect(sc, {showHidden: true, depth: null}));
+          if (DEBUG_LOG) {log('Local block:', scopeIdx, util.inspect(sc, {showHidden: true, depth: null}));}
           hasLocalBlock = true;
 
-          var localScopePairs = _.pairs(scopeObj);
+          let localScopePairs = _.pairs(scopeObj);
           for (jj = 0; jj < localScopePairs.length; jj++) {
-            var mungedVarName = e[0] + ' (block ' + scopeIdx + ')';
             e = localScopePairs[jj];
+            var mungedVarName = e[0] + ' (block ' + scopeIdx + ')';
 
             // TODO: decide later whether to do this or not, still undecided ...
             //
@@ -922,11 +954,11 @@ function listener(event, execState, eventData, data) {
         // names should not collide. i.e., you can't declare a var and
         // let/const variable with the SAME NAME in the top-level global scope
         scopeObj = sc.details_.details_[1];
-        var globalScopePairs = _.pairs(scopeObj);
+        let globalScopePairs = _.pairs(scopeObj);
         //log(scopeType, _.keys(scopeObj));
         for (jj = 0; jj < globalScopePairs.length; jj++) {
-          var globalVarname = globalScopePairs[jj][0];
-          var globalVal = globalScopePairs[jj][1];
+          let globalVarname = globalScopePairs[jj][0];
+          let globalVal = globalScopePairs[jj][1];
           if (!_.has(IGNORE_GLOBAL_VARS, globalVarname)) {
             curTraceEntry.ordered_globals.push(globalVarname);
             assert(!_.has(curTraceEntry.globals, globalVarname));
@@ -956,12 +988,12 @@ function listener(event, execState, eventData, data) {
         scopeIdx = nGlobalBlockScopes - sc.scope_index_;
         scopeObj = sc.details_.details_[1];
         assert(_.isObject(scopeObj));
-        //log('Global block:', util.inspect(sc, {showHidden: true, depth: null}));
-        var globalScopePairs = _.pairs(scopeObj);
+        if (DEBUG_LOG) {log('Global block:', util.inspect(sc, {showHidden: true, depth: null}));}
+        let globalScopePairs = _.pairs(scopeObj);
         //log(scopeType, _.keys(scopeObj));
         for (jj = 0; jj < globalScopePairs.length; jj++) {
-          var globalVarname = globalScopePairs[jj][0] + ' (block ' + scopeIdx + ')';
-          var globalVal = globalScopePairs[jj][1];
+          let globalVarname = globalScopePairs[jj][0] + ' (block ' + scopeIdx + ')';
+          let globalVal = globalScopePairs[jj][1];
 
           // TODO: decide later whether to do this or not, still undecided ...
           //
@@ -1071,7 +1103,7 @@ if (argv.typescript) {
   isTypescript = true;
   originalTsCod = cod; // stash this away!
   var tscCompilerOutput = typescriptCompile(cod);
-  //console.log(tscCompilerOutput);
+  //log(tscCompilerOutput);
 
   var tsSourceMap, compiledJsCod;
   tscCompilerOutput.outputs.forEach(function(e, i) {
@@ -1120,10 +1152,10 @@ try {
   //debug.setBreakOnUncaughtException(); // doesn't seem to do anything :/
 
   var overrideScope = {
-    setInterval: () => {throw 'Error: setInterval() is not supported by Python Tutor'},
-    setTimeout: () => {throw 'Error: setTimeout() is not supported by Python Tutor'},
-    setImmediate: () => {throw 'Error: setImmediate() is not supported by Python Tutor'},
-  }
+    setInterval: () => {throw 'Error: setInterval() is not supported by Python Tutor';},
+    setTimeout: () => {throw 'Error: setTimeout() is not supported by Python Tutor';},
+    setImmediate: () => {throw 'Error: setImmediate() is not supported by Python Tutor';},
+  };
 
   _eval(wrappedCod, 'userscript.js', overrideScope /* scope */, true /* includeGlobals */);
 }

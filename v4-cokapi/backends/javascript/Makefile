@@ -15,29 +15,47 @@ bash:
 	docker run -m 512M -t -i --rm --user=netuser --net=none --cap-drop all pgbovine/cokapi-js:v1 bash
 
 
-# older targets
+# to run natively on Linux or macOS
+
+# for building on native linux
+depsLinux:
+	tar -xvf node-v6.0.0-linux-x64.tar.xz
+	ln -s node-v6.0.0-linux-x64 node-v6.0.0
+	npm install # rely on package.json
+	npm install -g jshint # might need sudo
+
+# for building natively on macOS
+depsMac:
+	tar -xvf node-v6.0.0-darwin-x64.tar.gz
+	ln -s node-v6.0.0-darwin-x64 node-v6.0.0
+	npm install # rely on package.json
+	npm install -g jshint # might need sudo
 
 # to run on a specific input file: make infile=tests/fact.js
+# use '@' to NOT print out the command
 run:
-	jshint jslogger.js && node --expose-debug-as=Debug jslogger.js $(infile)
+	@jshint jslogger.js && node-v6.0.0/bin/node --expose-debug-as=Debug jslogger.js $(infile)
 
-# to run on a specific input file: make trace infile=tests/fact.js
-trace:
-	jshint jslogger.js && node --expose-debug-as=Debug jslogger.js --jsfile=/Users/pgbovine/Dropbox/opt-git/OnlinePythonTutor/v3/test-trace.js $(infile)
+# output a JSON trace that's compatible with Python Tutor's frontend
+# use '@' to NOT print out the command
+json:
+	@jshint jslogger.js && node-v6.0.0/bin/node --expose-debug-as=Debug jslogger.js --jsondump=true $(infile)
+
+# redirect json output to a file that you can import from something like
+# ../../../v5-unity/pytutor-embed-demo.html
+embed:
+	@make json infile=$(infile) > ../../../v5-unity/pytutor-embed-demo/js-test.json
+
 
 # to run on a specific input file: make pretty infile=tests/fact.js
+# use '@' to NOT print out the command
 pretty:
-	jshint jslogger.js && node --expose-debug-as=Debug jslogger.js --prettydump=true $(infile)
-
+	@jshint jslogger.js && node-v6.0.0/bin/node --expose-debug-as=Debug jslogger.js --prettydump=true $(infile)
 tspretty:
-	jshint jslogger.js && node --expose-debug-as=Debug jslogger.js --prettydump=true --typescript=true $(infile)
+	@jshint jslogger.js && node-v6.0.0/bin/node --expose-debug-as=Debug jslogger.js --prettydump=true --typescript=true $(infile)
 
-goldentest:
+golden:
 	jshint jslogger.js && python golden_test.py --all
 
 diffall:
 	jshint jslogger.js && python golden_test.py --diffall
-
-deps:
-	tar -xvf node-v6.0.0-linux-x64.tar.xz
-	npm install # rely on package.json

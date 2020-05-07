@@ -1,6 +1,6 @@
 ## Python Tutor's server and live chat service may go down at any time and lose your code! There is NO on-call technical support available.
 
-This free website is maintained by one volunteer in my spare time, so I'm unable to respond to most requests. Your issue is probably listed here. If you're sure it's not here yet, [email me](http://pgbovine.net/email-policy.htm) or file a GitHub issue, and use the "Generate permanent link" button to include a URL of your code. **I prioritize reproducible bug reports that show the visualizer doing something clearly incorrect.**
+This free website is maintained by one volunteer in my spare time, so I'm unable to respond to most requests. Your issue is probably listed here. If you're sure it's not here, [email me](http://pgbovine.net/email-policy.htm) or file a GitHub issue, and use the "Generate permanent link" button to include a URL of your code. **I only consider credible and reproducible bug reports that show the visualizer doing something clearly incorrect.** I have no time for feature requests.
 
 - If you don't get a reply from me, assume your issue will NOT be addressed. *Please don't email me multiple times.*
 - I can't personally provide any programming help. Use the "Get live help!" button to request help from volunteers.
@@ -30,13 +30,17 @@ Due to this ultra-focused design, the following features are not supported and w
   - [shorten your code](https://stackoverflow.com/help/minimal-reproducible-example) to isolate exactly what operations you want to visualize
   - e.g., make your numbers and strings smaller, your data structures contain fewer items, and your loops/functions run fewer times
   - or [set Python breakpoints](https://youtu.be/80ztTXP90Vs?t=42) using `#break` comments
+- Code that defines too many variables or objects
+  - [shorten your code](https://stackoverflow.com/help/minimal-reproducible-example) to isolate what variables you want to visualize
+  - remove unnecessary variables and objects
+  - for Python, [use pythontutor_hide](https://www.youtube.com/watch?v=Mxt9HZWgwAM&list=PLzV58Zm8FuBL2WxxZKGZ6j1dH8NKb_HYI&index=6) to selectively hide variables
+- Advanced language features or subtleties that only experts need to know (this is a tool for teaching *novices*)
 - Visualizing custom data structures from imported libraries; Python Tutor visualizes only built-in types and data structures
 - Importing most external libraries (try "Python 3.6 with Anaconda (experimental)" to access more libraries)
 - Reading data from external files (you can use strings to emulate files: examples for [Python3](http://goo.gl/uNvBGl) and [Python2](http://goo.gl/Q9xQ4p))
 - Interfacing with databases, filesystems, networking, or other external resources
 - Anything involving GUI programming or GUI/webpage components
 - Multi-threaded, concurrent, or asynchronous code; Python Tutor is only for regular single-threaded execution
-- Advanced language features or subtleties that only experts need to know (this is a tool for teaching *novices*)
 - Compile-time magic (e.g., macros, metaprogramming, templates) can't be visualized; Python Tutor visualizes only run-time memory state
 - Editing multiple source code files (Python Tutor is not an IDE!)
 - User accounts, saving code as files in the cloud, or integrating with online services like GitHub (again, Python Tutor is not an IDE!)
@@ -56,13 +60,18 @@ Due to this ultra-focused design, the following features are not supported and w
 
 ### C and C++ unsupported features
 
-- [doesn't visualize when function parameters get mutated](https://github.com/pgbovine/opt-cpp-backend/issues/57) (make a copy to a new local variable to visualize)
-- [doesn't visualize function return values](https://github.com/pgbovine/opt-cpp-backend/issues/4) (add a temporary return variable to visualize)
+- [doesn't visualize when function parameters get mutated](https://github.com/pgbovine/opt-cpp-backend/issues/57) (remedy: make a copy to a new local variable to visualize)
+- [doesn't visualize function return values](https://github.com/pgbovine/opt-cpp-backend/issues/4) (remedy: add a temporary return variable to visualize)
 - [unions](https://github.com/pgbovine/opt-cpp-backend/issues/68)
 - taking text input from the user using scanf(), fgets with stdin, cin >>,  etc.
 - code with [undefined behavior](https://blog.regehr.org/archives/213) may not match what happens when running on your own computer!
   - specifically, code with memory errors will fail-fast using [Valgrind Memcheck](http://valgrind.org/docs/manual/mc-manual.html)
+- memory leaks: leaked memory is not visualized since nothing points to it
 - some complex typedefs
+- function pointers
+- if pointers of different types point to the same memory block, unexpected things may happen; e.g., if an int* and a char* point to the same block of memory, it may be visualized as either an int or a char array (see [type punning](https://blog.regehr.org/archives/959)) (see [GitHub issue](https://github.com/pgbovine/opt-cpp-backend/issues/83))
+- bitfields
+- alternative representations of memory like viewing individual bits or bytes
 - [stack arrays without compile-time sizes](https://github.com/pgbovine/opt-cpp-backend/issues/44)
 - [read-only memory isn't visualized separately from the heap](https://github.com/pgbovine/opt-cpp-backend/issues/70)
 - [struct members declared as unbounded arrays](https://github.com/pgbovine/opt-cpp-backend/issues/73)
@@ -84,20 +93,26 @@ Look at these GitHub issues for more C/C++ unsupported features: https://github.
 - anything that operates on webpages, such as DOM manipulation, alert(), prompt(), confirm(), etc.
   - this includes trying to import frontend libraries or frameworks (e.g., jQuery, React)
 - Date() object
-- some let-defined variables don't display properly ([example](https://github.com/pgbovine/OnlinePythonTutor/issues/285)) (this is something I want to eventually fix ... email me or file a GitHub issue if you find more examples!)
+- for-loop variables show up *duplicated* in two nested blocks due to how the Node.js JavaScript debugger emits its values ([see GitHub issue](https://github.com/pgbovine/OnlinePythonTutor/issues/264) for details)
+- features that novices don't usually need to know about, like adding object fields to an array, which can be confusing ([example code](http://pythontutor.com/visualize.html#code=let%20a%20%3D%20%5B'apples',%202,%20true%5D%3B%20//%20array%0A//%20if%20you%20add%20object%20fields%20to%20arrays%20%28or%20other%20types%29,%20we%20don't%20visualize%20it%0Aa.myName%20%3D%20%22Philip%22%0Aa.myNumber%20%3D%2042%3B%0Aconsole.log%28a,%20a.myName,%20a.myNumber%29%3B&cumulative=false&curInstr=4&heapPrimitives=nevernest&mode=display&origin=opt-frontend.js&py=js&rawInputLstJSON=%5B%5D&textReferences=false))
 - more JavaScript unsupported features: https://github.com/pgbovine/OnlinePythonTutor/issues?q=is%3Aissue+is%3Aopen+label%3Ajavascript
 
 ### Java unsupported features
 
+Note that the Java version is **not maintained anymore** so I am unlikely to fix reported bugs here.
+
 - some data structures like ArrayList aren't visualized properly (see [GitHub issue](https://github.com/pgbovine/OnlinePythonTutor/issues/236))
 
 ### Ruby unsupported features
+
+Note that the Ruby version is **not maintained anymore** so I am unlikely to fix reported bugs here.
 
 - see GitHub issues: https://github.com/pgbovine/OnlinePythonTutor/issues?q=is%3Aissue+is%3Aopen+label%3Aruby
 
 
 ### Other language-independent unsupported features
 
+- printing to `stderr` might not work; use regular `stdout` print statements
 - Python Tutor is meant for desktop/laptop computers, **not for mobile devices**. Some features such as live help mode simply don't work on mobile devices. The UI also looks cluttered and can be buggy on small screens.
 - Stepping *within* a line of code to show how subexpressions get evaluated within that line; the best workaround is to split complex expressions into multiple lines and assign temporary variables on each line ([example](http://pythontutor.com/visualize.html#code=w%20%3D%205%0Ax%20%3D%2010%0Ay%20%3D%2020%0Az%20%3D%2030%0A%0A%23%20bad%3A%20executes%20all%20at%20once%0Aresult%20%3D%20w%20-%20x%20*%20%28y%20%2B%20z%29%0A%0A%23%20good%3A%20shows%20individual%20steps%0At1%20%3D%20y%20%2B%20z%0At2%20%3D%20x%20*%20t1%0Aresult2%20%3D%20w%20-%20t2&cumulative=false&heapPrimitives=nevernest&mode=edit&origin=opt-frontend.js&py=2&rawInputLstJSON=%5B%5D&textReferences=false)).
 - Unicode doesn't well, especially for Ruby: [#134](https://github.com/pgbovine/OnlinePythonTutor/issues/134), and Python 2: [#77](https://github.com/pgbovine/OnlinePythonTutor/issues/77), [#124](https://github.com/pgbovine/OnlinePythonTutor/issues/124), [#194](https://github.com/pgbovine/OnlinePythonTutor/issues/194) (use ASCII characters when possible)

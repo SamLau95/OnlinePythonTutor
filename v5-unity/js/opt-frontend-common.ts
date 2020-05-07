@@ -90,7 +90,7 @@ export abstract class AbstractBaseFrontend {
   // so you will need to customize for your server:
   serverRoot = (window.location.protocol === 'https:') ?
                 'https://cokapi.com/' : // my certificate for https is registered via cokapi.com, so use it for now
-                'http://cokapi.com/';   // try cokapi.com so that hopefully it works through firewalls better than directly using IP addr
+                'http://cokapi.com/';   // try cokapi.com so that hopefully it works through firewalls better than directly using its IP addr (which should be 104.237.139.253)
                                         // (but that's just an unsubstantiated hunch)
 
   // randomly pick one backup server to load balance:

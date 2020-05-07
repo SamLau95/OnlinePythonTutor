@@ -65,11 +65,17 @@ First read the [**unsupported features doc**](unsupported-features.md#read-this-
   - especially useful for large function/class/module/type definitions, which are largely boilerplate and irrelevant to the core lessons of the code
   - this can go a long way toward preventing information overload
   - June 2018: implemented a simpler version as #pythontutor_hide and #pythontutor_hide_type annotations for Python in [pg_logger.py](v5-unity/pg_logger.py) ([video demo](https://www.youtube.com/watch?v=Mxt9HZWgwAM&list=PLzV58Zm8FuBL2WxxZKGZ6j1dH8NKb_HYI&index=6))
-- more advanced navigation through execution steps. e.g.,:
+- more advanced navigation through execution steps like a debugger. e.g.,:
   - click a line of code to jump to where it is next executed
   - set breakpoints by clicking on gutter instead of directly on the code
-  - debugger-style stepping into and out of function calls
+  - debugger-style stepping into and out of function calls (as well as skipping entire function calls, like "step over")
+  - variable watchpoints so that you can navigate to the next step in which the given variable changes
+  - maybe see [Pernosco](https://pernos.co/) for inspiration
 - drag-and-drop of visualization elements to let the user define custom ad-hoc layouts, and then remembering those positions across similar executions
+  - 2020-02-06: implemented first draft as a "Customize visualization" pane at the bottom of the visualizer; it's limited in that it does *not* remember positions across multiple executions. Similarly, it also doesn't remember them when you share via URL or live chat with others in a shared session. Challenges to implementing this:
+    - when you edit the code too much, then objects can be totally different, so what you think is heap_object_1 or whatever can turn out to be a completely different object on the next execution; there's no generally good way to do this! so punt. a simpler example is if you switch the order of 2 statements that define objects; then what the system thinks is object 1 and 2 will flip, i think: e.g., "x = [1,2,3]; y = [4,5,6]"
+    - for C/C++ we currently use pointer values as object IDs, so they probably won't match across executions; but we can canonicalize it somehow based on, say, order of appearance in the trace; that *might* work, since we already canonicalize for non-C languages.
+    - one far-out idea for synchronizing in shared sessions is to send YOUR trace to the other parties after you execute; that way, everyone is guaranteed to be using the same trace with the same object IDs. right now everyone runs code independently and generates their own traces. (actually this might lighten the load on the execution servers a bit since code only needs to be executed ONCE, not N times like it is now if there are N users in a session!)
 - hover over stack frames and then highlight the code that contains the call site of each frame
   - (more generally, think about other hover-based cross-linking of compile- and run-time information in visualizations)
 - more detailed visualizations of data structure element accesses or slices ([GitHub Issue](https://github.com/pgbovine/OnlinePythonTutor/issues/185))
@@ -125,6 +131,7 @@ First read the [**unsupported features doc**](unsupported-features.md#read-this-
   - that way, I use TogetherJS only for the shared cursors (which some users even find annoying!)
   - this will give me more flexibility without being constrained by TogetherJS's clunky implementations
 - maybe some lightweight chat-based scaffolding or structure to prompt learners and helpers to interact in more productive ways rather than being a blank-slate freeform chat session ([example helper protocol](https://ksm-cs.blogspot.com/2019/10/gps-syndrome.html), example requester tips from Stack Overflow: [one](https://stackoverflow.com/help/minimal-reproducible-example), [two](https://stackoverflow.com/help/how-to-ask))
+- right now, in shared sessions the *same* code is executed N times whenever someone executes, since it simulates a "Visualize Execution" button click for all other people in the session, so they are burdening the server by executing N copies of the same code. moreover, some of their traces might be subtly different due to randomness or nondeterminism (e.g., different C/C++ pointer values). the "right" way to ensure that everyone is visualizing the exact same trace, as well as reducing burden on the server, is to simply have 1 person execute and then when they receive the trace back from the server, have that person send the trace to all other people in the session.
 
 
 ## Language Backends
@@ -135,6 +142,8 @@ These features deal with the server-side backends that run the user's code.
 - if there's an infinite loop (or execution runs too long), still trace and render the first 1,000 steps instead of just returning an error, so users can see which parts of their code led to the too-long execution ([GitHub Issue](https://github.com/pgbovine/OnlinePythonTutor/issues/265))
 - implement *backend* breakpoints (like the Python #break annotation) for all other languages, so that overly-long execution traces don't get generated even for larger pieces of code
   - right now there are breakpoints in the frontend, but that doesn't help when the backend already executes for > 1,000 steps; we need breakpoints in the backend (likely implemented as comment annotations or GUI clicks in the code editor gutter) to really clamp down on overly-long executions
+- similarly, implement variable watches or ignores in the backend so that we can specify what variables we care about (or don't care about) visualizing; again, we can do this in the frontend, but if we do this in the backend, it will *drastically* cut down on the sizes of traces and allow users to visualize much more code
+  - one potential format is something like adding a comment of "function_name::variable_name" for local variables; it would be nice to just put them as comments beside a particular function, but that requires language-specific parsers to know about functions (e.g., in Python you can do it as docstrings, but for other languages you need suitable hacks)
 - more reliable and faster server-side execution for non-Python backends
   - this may involve creating [smaller and more efficient](https://www.youtube.com/watch?v=pPsREQbf3PA) Docker images, maybe having separate images for compiling and running the respective backend binaries (so that the image that runs the backend doesn't have all the bloat of source code or build tools)
   - also, right now the server launches a separate Docker process for every incoming (non-Python) request, which is probably super-wasteful; a potentially more efficient solution is to have a *persistent* microservice server running inside of a long-running Docker container for each individual language backend, and then have a (nginx?) proxy direct traffic into each of the microservices depending on the requested language; this will avoid spawning/destroying a Docker container *per incoming request*!
@@ -169,12 +178,13 @@ I've thus far resisted going down this path since there are already so many grea
 
 The core issue here is that Python Tutor now has a fixed rendering algorithm (with a small set of toggle options), which I designed heuristically to meet [common introductory teaching use cases](unsupported-features.md#read-this-first). However, instructors in particular want more flexibility in what and how to render their data.
 
-- define multiple custom views of the same underlying data. e.g.,:
+- define multiple custom views of the same underlying data (either via the UI or by letting the user attach custom JS rendering code to individual object values) e.g.,:
   - C char arrays: view as strings or as encoded binary bytes?
   - C unions can be viewed in different ways
+  - C allows multiple pointers of different types to refer to the same block of memory. e.g., if an int* and a char* refers to the same memory block, should it be rendered as an array of ints or an array of chars? ideally let the user choose!
   - Python 2 strings: view as text or as encoded binary bytes?
   - objects: view as their constituent parts or as their "toString()"-like printed representations?
-  - numbers: formatted as hex, decimal, etc.? how much precision for floats?
+  - numbers: formatted as hex, decimal, binary (for bit-level manipulations) etc.? how much precision for floats?
   - more extreme: a binary blob can represent, say, a JPEG image; should we decode and display it?
 - define multiple linked representations: the ability to have one variable map to multiple visualization components.
   - This is useful for, say, an NLP dynamic programming algorithm where the code must both keep track of a parse tree and a 2-D matrix for the dynamic programming table, and both should update in unison.

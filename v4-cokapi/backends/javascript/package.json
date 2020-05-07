@@ -9,9 +9,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository" : {
-    "type" : "git",
-    "url" : "https://github.com/pgbovine/OnlinePythonTutor"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pgbovine/OnlinePythonTutor"
   },
   "author": "Philip Guo",
   "license": "MIT",
